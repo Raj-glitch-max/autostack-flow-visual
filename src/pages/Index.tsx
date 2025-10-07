@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Play, Loader2, Webhook } from "lucide-react";
+import { Play, Loader2, Webhook, GitBranch, Wrench, Container, Cloud, Activity } from "lucide-react";
+import { NodeCard } from "@/components/NodeCard";
+import { ConnectionLine } from "@/components/ConnectionLine";
 import { BuildHistory } from "@/components/BuildHistory";
 import { PipelineProgress } from "@/components/PipelineProgress";
 import { DeploymentStatus } from "@/components/DeploymentStatus";
+import { CloudWatchMetrics } from "@/components/CloudWatchMetrics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -11,10 +14,49 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
+const nodes = [
+  {
+    id: "github_commit",
+    title: "GitHub Commit",
+    description: "Triggers the CI/CD pipeline",
+    icon: GitBranch,
+    tooltip: "Real webhook from GitHub triggers the pipeline",
+  },
+  {
+    id: "jenkins_build",
+    title: "Jenkins Build",
+    description: "CI build & Terraform provision infra",
+    icon: Wrench,
+    tooltip: "Real Jenkins CI/CD build via API with Terraform",
+  },
+  {
+    id: "docker_ecr",
+    title: "Docker → ECR",
+    description: "Image built and pushed to AWS ECR",
+    icon: Container,
+    tooltip: "Real Docker build and push to AWS ECR",
+  },
+  {
+    id: "ecs_deploy",
+    title: "ECS Deploy",
+    description: "Terraform deploys container to ECS",
+    icon: Cloud,
+    tooltip: "Real AWS ECS deployment with Terraform",
+  },
+  {
+    id: "monitoring",
+    title: "Monitoring",
+    description: "CloudWatch monitors app performance",
+    icon: Activity,
+    tooltip: "Real CloudWatch metrics and logs",
+  },
+];
+
 const Index = () => {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [githubUrl, setGithubUrl] = useState("https://github.com/your-org/your-repo");
   const [isStarting, setIsStarting] = useState(false);
+  const [activeStages, setActiveStages] = useState<Set<string>>(new Set());
 
   const startNewPipeline = async () => {
     if (!githubUrl.trim()) {
@@ -27,6 +69,7 @@ const Index = () => {
     }
 
     setIsStarting(true);
+    setActiveStages(new Set());
 
     try {
       // Extract repo info from URL
@@ -40,7 +83,7 @@ const Index = () => {
           github_repo: repoName,
           commit_sha: Math.random().toString(36).substr(2, 7),
           commit_message: 'Manual trigger from UI',
-          status: 'pending',
+          status: 'running',
           triggered_by: 'manual'
         })
         .select()
@@ -48,7 +91,41 @@ const Index = () => {
 
       if (runError) throw runError;
 
+      // Create build stages
+      const stages = ['github_commit', 'jenkins_build', 'docker_ecr', 'ecs_deploy', 'monitoring'];
+      const stageInserts = stages.map(stage => ({
+        pipeline_run_id: pipelineRun.id,
+        stage_name: stage,
+        status: 'pending',
+        logs: []
+      }));
+
+      const { error: stagesError } = await supabase
+        .from('build_stages')
+        .insert(stageInserts);
+
+      if (stagesError) throw stagesError;
+
       setSelectedRunId(pipelineRun.id);
+
+      // Subscribe to stage updates for visual feedback
+      const channel = supabase
+        .channel(`pipeline_${pipelineRun.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'build_stages',
+            filter: `pipeline_run_id=eq.${pipelineRun.id}`
+          },
+          (payload: any) => {
+            if (payload.new.status === 'running' || payload.new.status === 'success') {
+              setActiveStages(prev => new Set([...prev, payload.new.stage_name]));
+            }
+          }
+        )
+        .subscribe();
 
       // Trigger the pipeline execution
       const { error: pipelineError } = await supabase.functions.invoke('run-pipeline', {
@@ -64,6 +141,11 @@ const Index = () => {
         title: "Pipeline Started!",
         description: "Your CI/CD pipeline is now running"
       });
+
+      // Cleanup subscription after 60 seconds
+      setTimeout(() => {
+        supabase.removeChannel(channel);
+      }, 60000);
 
     } catch (error) {
       console.error('Error starting pipeline:', error);
@@ -166,13 +248,46 @@ const Index = () => {
           </Card>
         </motion.div>
 
+        {/* Pipeline Visual Flow */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="mb-8"
+        >
+          <Card className="p-6 bg-card border-border">
+            <h3 className="font-semibold text-lg mb-6 text-center">Pipeline Flow</h3>
+            <div className="flex flex-col items-center space-y-4">
+              {nodes.map((node, index) => (
+                <div key={node.id} className="w-full max-w-md">
+                  <NodeCard
+                    id={node.id}
+                    title={node.title}
+                    description={node.description}
+                    icon={node.icon}
+                    isActive={activeStages.has(node.id)}
+                    tooltipContent={node.tooltip}
+                    disabled
+                  />
+                  {index < nodes.length - 1 && (
+                    <ConnectionLine 
+                      isActive={activeStages.has(node.id) && activeStages.has(nodes[index + 1].id)} 
+                      isVertical 
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        </motion.div>
+
         {/* Main Dashboard Grid */}
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Build History - Left Column */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.4 }}
             className="lg:col-span-1"
           >
             <BuildHistory
@@ -181,15 +296,18 @@ const Index = () => {
             />
           </motion.div>
 
-          {/* Pipeline Progress & Deployment - Right Columns */}
+          {/* Pipeline Details - Right Columns */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.5 }}
             className="lg:col-span-2 space-y-6"
           >
             <PipelineProgress pipelineRunId={selectedRunId} />
-            <DeploymentStatus pipelineRunId={selectedRunId} />
+            <div className="grid md:grid-cols-2 gap-6">
+              <DeploymentStatus pipelineRunId={selectedRunId} />
+              <CloudWatchMetrics pipelineRunId={selectedRunId} />
+            </div>
           </motion.div>
         </div>
 
