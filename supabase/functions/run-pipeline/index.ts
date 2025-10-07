@@ -12,8 +12,28 @@ serve(async (req) => {
   }
 
   try {
+    // Validate authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      console.error('No authorization header provided');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { pipelineRunId, repoUrl } = await req.json();
     console.log(`Starting pipeline execution for run: ${pipelineRunId}`);
+
+    // Validate GitHub URL format
+    const githubUrlRegex = /^https:\/\/github\.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+(\.git)?$/;
+    if (!githubUrlRegex.test(repoUrl)) {
+      console.error('Invalid GitHub URL format:', repoUrl);
+      return new Response(
+        JSON.stringify({ error: 'Invalid GitHub repository URL' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

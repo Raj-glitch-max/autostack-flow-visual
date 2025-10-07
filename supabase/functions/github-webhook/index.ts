@@ -14,6 +14,55 @@ serve(async (req) => {
   try {
     console.log('GitHub webhook received');
     
+    // Verify webhook signature
+    const signature = req.headers.get('x-hub-signature-256');
+    const secret = Deno.env.get('GITHUB_WEBHOOK_SECRET');
+    
+    if (!secret) {
+      console.error('GITHUB_WEBHOOK_SECRET not configured');
+      return new Response(
+        JSON.stringify({ error: 'Webhook secret not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!signature) {
+      console.error('No signature provided in webhook');
+      return new Response(
+        JSON.stringify({ error: 'No signature provided' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const body = await req.text();
+    
+    // Validate signature using Web Crypto API
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secret);
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const msgData = encoder.encode(body);
+    const hashBuffer = await crypto.subtle.sign('HMAC', key, msgData);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const expectedSignature = 'sha256=' + hashHex;
+    
+    if (signature !== expectedSignature) {
+      console.error('Invalid webhook signature');
+      return new Response(
+        JSON.stringify({ error: 'Invalid signature' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Webhook signature verified successfully');
+    
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -29,11 +78,22 @@ serve(async (req) => {
       );
     }
 
-    const payload = await req.json();
+    const payload = JSON.parse(body);
     console.log('Webhook payload received:', JSON.stringify(payload).substring(0, 200));
 
     const { repository, commits, pusher } = payload;
     const latestCommit = commits[commits.length - 1];
+
+    // Validate GitHub URL
+    const repoUrl = repository.clone_url;
+    const githubUrlRegex = /^https:\/\/github\.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+(\.git)?$/;
+    if (!githubUrlRegex.test(repoUrl)) {
+      console.error('Invalid repository URL format:', repoUrl);
+      return new Response(
+        JSON.stringify({ error: 'Invalid repository URL' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Create a new pipeline run
     const { data: pipelineRun, error: runError } = await supabase
@@ -76,7 +136,6 @@ serve(async (req) => {
     console.log('Build stages created successfully');
 
     // Trigger the pipeline execution asynchronously
-    // In a real implementation, this would invoke the pipeline orchestrator
     fetch(`${supabaseUrl}/functions/v1/run-pipeline`, {
       method: 'POST',
       headers: {
