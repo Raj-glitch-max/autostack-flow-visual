@@ -18,9 +18,9 @@ const nodes = [
   {
     id: "github_commit",
     title: "GitHub Commit",
-    description: "Developer commits code",
+    description: "Triggers the CI/CD pipeline",
     icon: GitBranch,
-    tooltip: "Where developer commits code → triggers CI/CD.",
+    tooltip: "Developer commits code. This triggers the CI/CD pipeline.",
     logs: [
       "Received webhook from GitHub...",
       "Commit SHA: a7f3b9c - 'Updated deployment config'",
@@ -30,9 +30,9 @@ const nodes = [
   {
     id: "jenkins_build",
     title: "Jenkins Build",
-    description: "CI build & Terraform scripts",
+    description: "CI build & Terraform provision infra",
     icon: Wrench,
-    tooltip: "CI build step. Terraform scripts would run here.",
+    tooltip: "CI build triggered. Terraform scripts would run here to provision infra.",
     logs: [
       "Jenkins job started...",
       "Running Terraform plan...",
@@ -43,9 +43,9 @@ const nodes = [
   {
     id: "docker_ecr",
     title: "Docker → ECR",
-    description: "Container image built & pushed",
+    description: "Image built and pushed to AWS ECR",
     icon: Container,
-    tooltip: "Docker image built & pushed to ECR.",
+    tooltip: "Docker image built and pushed to AWS ECR.",
     logs: [
       "Building Docker image...",
       "Image tagged: autostack-app:v1.2.3",
@@ -56,9 +56,9 @@ const nodes = [
   {
     id: "ecs_deploy",
     title: "ECS Deploy",
-    description: "Terraform provisions ECS service",
+    description: "Terraform deploys container to ECS",
     icon: Cloud,
-    tooltip: "Terraform provisions ECS service → deploys container.",
+    tooltip: "Terraform provisions ECS service and deploys container.",
     logs: [
       "Running Terraform apply...",
       "Provisioning ECS service...",
@@ -69,9 +69,9 @@ const nodes = [
   {
     id: "monitoring",
     title: "Monitoring",
-    description: "CloudWatch / Prometheus active",
+    description: "CloudWatch monitors app performance",
     icon: Activity,
-    tooltip: "Application monitored via CloudWatch / Prometheus.",
+    tooltip: "CloudWatch / Prometheus monitors the application performance.",
     logs: [
       "Monitoring activated...",
       "Health check: PASSED",
