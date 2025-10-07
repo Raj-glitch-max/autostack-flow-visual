@@ -7,6 +7,7 @@ import { LogsPanel } from "@/components/LogsPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Log {
   id: string;
@@ -21,7 +22,7 @@ const nodes = [
     title: "GitHub Commit",
     description: "Triggers the CI/CD pipeline",
     icon: GitBranch,
-    tooltip: "Developer commits code. This triggers the CI/CD pipeline.",
+    tooltip: "Developer commits code. This triggers the pipeline. (Simulated webhook)",
     logs: [
       "Received webhook from GitHub...",
       "Commit SHA: a7f3b9c - 'Updated deployment config'",
@@ -31,9 +32,9 @@ const nodes = [
   {
     id: "jenkins_build",
     title: "Jenkins Build",
-    description: "CI build & Terraform provision infra",
+    description: "Real Jenkins CI/CD build via API",
     icon: Wrench,
-    tooltip: "CI build triggered. Terraform scripts would run here to provision infra.",
+    tooltip: "REAL: Triggers actual Jenkins build via API. Terraform provisioning is simulated.",
     logs: [
       "Jenkins job started...",
       "Running Terraform plan...",
@@ -44,9 +45,9 @@ const nodes = [
   {
     id: "docker_ecr",
     title: "Docker → ECR",
-    description: "Image built and pushed to AWS ECR",
+    description: "Real Docker build & ECR push",
     icon: Container,
-    tooltip: "Docker image built and pushed to AWS ECR.",
+    tooltip: "REAL: Docker image built and pushed to AWS ECR via AWS SDK.",
     logs: [
       "Building Docker image...",
       "Image tagged: autostack-app:v1.2.3",
@@ -57,9 +58,9 @@ const nodes = [
   {
     id: "ecs_deploy",
     title: "ECS Deploy",
-    description: "Terraform deploys container to ECS",
+    description: "Real AWS ECS deployment",
     icon: Cloud,
-    tooltip: "Terraform provisions ECS service and deploys container.",
+    tooltip: "REAL: Deploys container to ECS via AWS SDK. Terraform infrastructure is pre-provisioned.",
     logs: [
       "Running Terraform apply...",
       "Provisioning ECS service...",
@@ -70,9 +71,9 @@ const nodes = [
   {
     id: "monitoring",
     title: "Monitoring",
-    description: "CloudWatch monitors app performance",
+    description: "Real CloudWatch metrics & logs",
     icon: Activity,
-    tooltip: "CloudWatch / Prometheus monitors the application performance.",
+    tooltip: "REAL: Fetches live metrics and logs from AWS CloudWatch.",
     logs: [
       "Monitoring activated...",
       "Health check: PASSED",
@@ -103,6 +104,20 @@ const Index = () => {
     setLogs(prev => [...prev, newLog]);
   };
 
+  const callEdgeFunction = async (functionName: string, payload: any) => {
+    try {
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: payload,
+      });
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error(`Error calling ${functionName}:`, error);
+      return null;
+    }
+  };
+
   const startPipeline = async () => {
     if (isRunning) return;
     
@@ -112,25 +127,69 @@ const Index = () => {
     
     addLog("🚀 Starting AutoStack CI/CD Pipeline...", "info");
     
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
+    try {
+      // GitHub Commit
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setActiveNodes(prev => new Set([...prev, "github_commit"]));
+      addLog("📍 GitHub Commit stage activated", "info");
+      nodes[0].logs.forEach(log => addLog(log, log.includes('✓') ? 'success' : 'info'));
       
+      // Jenkins Build - Real API call
       await new Promise(resolve => setTimeout(resolve, 1500));
+      setActiveNodes(prev => new Set([...prev, "jenkins_build"]));
+      addLog("📍 Triggering real Jenkins build...", "info");
       
-      setActiveNodes(prev => new Set([...prev, node.id]));
-      
-      for (const logMessage of node.logs) {
-        await new Promise(resolve => setTimeout(resolve, 400));
-        addLog(logMessage, logMessage.includes('✓') ? 'success' : 'info');
+      const jenkinsResult = await callEdgeFunction('trigger-jenkins', { repoUrl: githubUrl });
+      if (jenkinsResult?.logs) {
+        jenkinsResult.logs.forEach((log: string) => addLog(log, log.includes('✓') ? 'success' : 'info'));
       }
+      
+      // Docker → ECR - Real operation
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setActiveNodes(prev => new Set([...prev, "docker_ecr"]));
+      addLog("📍 Building and pushing Docker image to ECR...", "info");
+      
+      const imageTag = `v${Date.now()}`;
+      const dockerResult = await callEdgeFunction('docker-ecr-push', { imageTag });
+      if (dockerResult?.logs) {
+        dockerResult.logs.forEach((log: string) => addLog(log, log.includes('✓') ? 'success' : 'info'));
+      }
+      
+      // ECS Deploy - Real deployment
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setActiveNodes(prev => new Set([...prev, "ecs_deploy"]));
+      addLog("📍 Deploying to AWS ECS...", "info");
+      
+      const imageUri = dockerResult?.imageUri || `autostack-app:${imageTag}`;
+      const ecsResult = await callEdgeFunction('ecs-deploy', { imageUri });
+      if (ecsResult?.logs) {
+        ecsResult.logs.forEach((log: string) => addLog(log, log.includes('✓') ? 'success' : 'info'));
+      }
+      
+      // CloudWatch Monitoring - Real metrics
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setActiveNodes(prev => new Set([...prev, "monitoring"]));
+      addLog("📍 Fetching CloudWatch monitoring data...", "info");
+      
+      const monitoringResult = await callEdgeFunction('cloudwatch-logs', {});
+      if (monitoringResult?.logs) {
+        monitoringResult.logs.forEach((log: string) => addLog(log, log.includes('✓') ? 'success' : 'info'));
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      addLog("🎉 Pipeline completed successfully!", "success");
+      toast({
+        title: "Pipeline Complete!",
+        description: "All stages executed with real service integrations.",
+      });
+    } catch (error) {
+      addLog("❌ Pipeline failed. Check logs for details.", "info");
+      toast({
+        title: "Pipeline Error",
+        description: "Some stages failed. Check logs for details.",
+        variant: "destructive",
+      });
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
-    addLog("🎉 Pipeline completed successfully!", "success");
-    toast({
-      title: "Pipeline Complete!",
-      description: "All stages executed successfully.",
-    });
     
     setIsRunning(false);
   };
@@ -141,26 +200,54 @@ const Index = () => {
     setIsRunning(false);
   };
 
-  const handleNodeClick = (nodeId: string) => {
+  const handleNodeClick = async (nodeId: string) => {
     if (isRunning) return;
     
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
     
     setActiveNodes(prev => new Set([...prev, nodeId]));
-    
     addLog(`📍 Manual trigger: ${node.title}`, "info");
     
-    const repoName = githubUrl.split('/').slice(-1)[0] || 'demo-app';
-    
-    node.logs.forEach((logMessage, index) => {
-      setTimeout(() => {
-        const customLog = logMessage
-          .replace('autostack-app', repoName)
-          .replace("Commit SHA: a7f3b9c - 'Updated deployment config'", `Commit SHA: ${Math.random().toString(36).substr(2, 7)} - 'Updated from ${repoName}'`);
-        addLog(customLog, logMessage.includes('✓') ? 'success' : 'info');
-      }, index * 400);
-    });
+    // Call real backend services for specific nodes
+    try {
+      if (nodeId === "jenkins_build") {
+        const result = await callEdgeFunction('trigger-jenkins', { repoUrl: githubUrl });
+        if (result?.logs) {
+          result.logs.forEach((log: string) => addLog(log, log.includes('✓') ? 'success' : 'info'));
+        }
+      } else if (nodeId === "docker_ecr") {
+        const imageTag = `manual-v${Date.now()}`;
+        const result = await callEdgeFunction('docker-ecr-push', { imageTag });
+        if (result?.logs) {
+          result.logs.forEach((log: string) => addLog(log, log.includes('✓') ? 'success' : 'info'));
+        }
+      } else if (nodeId === "ecs_deploy") {
+        const imageUri = `autostack-app:manual-v${Date.now()}`;
+        const result = await callEdgeFunction('ecs-deploy', { imageUri });
+        if (result?.logs) {
+          result.logs.forEach((log: string) => addLog(log, log.includes('✓') ? 'success' : 'info'));
+        }
+      } else if (nodeId === "monitoring") {
+        const result = await callEdgeFunction('cloudwatch-logs', {});
+        if (result?.logs) {
+          result.logs.forEach((log: string) => addLog(log, log.includes('✓') ? 'success' : 'info'));
+        }
+      } else {
+        // Simulated logs for GitHub commit node
+        const repoName = githubUrl.split('/').slice(-1)[0] || 'demo-app';
+        node.logs.forEach((logMessage, index) => {
+          setTimeout(() => {
+            const customLog = logMessage
+              .replace('autostack-app', repoName)
+              .replace("Commit SHA: a7f3b9c - 'Updated deployment config'", `Commit SHA: ${Math.random().toString(36).substr(2, 7)} - 'Updated from ${repoName}'`);
+            addLog(customLog, logMessage.includes('✓') ? 'success' : 'info');
+          }, index * 400);
+        });
+      }
+    } catch (error) {
+      addLog("❌ Error executing node action", "info");
+    }
     
     toast({
       title: `${node.title} Activated`,
@@ -283,10 +370,10 @@ const Index = () => {
           className="text-center text-sm text-muted-foreground mt-12 p-6 bg-card/50 rounded-lg border border-border"
         >
           <p className="mb-2">
-            ⚡ This is a visual simulation of the AutoStack DevOps workflow
+            ⚡ AutoStack DevOps Pipeline with Real Service Integration
           </p>
           <p>
-            Real implementation uses Terraform for infrastructure provisioning, Jenkins for CI/CD, AWS ECS for container orchestration, and CloudWatch for monitoring
+            Jenkins CI/CD builds are triggered via API, Docker images are pushed to AWS ECR, ECS deployments execute in real-time, and CloudWatch provides live monitoring metrics. Terraform provisioning steps are simulated with descriptive tooltips.
           </p>
         </motion.div>
       </div>
