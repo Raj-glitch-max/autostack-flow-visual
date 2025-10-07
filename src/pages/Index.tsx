@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Play, Loader2, Webhook, GitBranch, Wrench, Container, Cloud, Activity, Boxes } from "lucide-react";
+import { Play, Loader2, Webhook, GitBranch, Wrench, Container, Cloud, Activity, Boxes, LogOut } from "lucide-react";
 import { NodeCard } from "@/components/NodeCard";
 import { ConnectionLine } from "@/components/ConnectionLine";
 import { BuildHistory } from "@/components/BuildHistory";
@@ -13,13 +14,53 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { User } from "@supabase/supabase-js";
+import { z } from "zod";
+
+const githubUrlSchema = z
+  .string()
+  .url("Must be a valid URL")
+  .regex(
+    /^https:\/\/github\.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+(\/.git)?$/,
+    "Must be a valid GitHub HTTPS URL (https://github.com/org/repo)"
+  );
 
 const Index = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [nodes, setNodes] = useState<any[]>([]);
   const [githubUrl, setGithubUrl] = useState("https://github.com/your-org/your-repo");
   const [isStarting, setIsStarting] = useState(false);
   const [activeStages, setActiveStages] = useState<Set<string>>(new Set());
+
+  // Auth state management
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+      setIsLoadingAuth(false);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsLoadingAuth(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!isLoadingAuth && !user) {
+      navigate("/auth");
+    }
+  }, [user, isLoadingAuth, navigate]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
 
   // Fetch pipeline configuration from Supabase
   useEffect(() => {
@@ -56,12 +97,17 @@ const Index = () => {
   }, []);
 
   const startNewPipeline = async () => {
-    if (!githubUrl.trim()) {
-      toast({
-        title: "GitHub URL Required",
-        description: "Please enter a valid GitHub repository URL",
-        variant: "destructive"
-      });
+    // Validate GitHub URL with zod
+    try {
+      githubUrlSchema.parse(githubUrl.trim());
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Invalid GitHub URL",
+          description: error.errors[0].message,
+          variant: "destructive"
+        });
+      }
       return;
     }
 
@@ -71,7 +117,7 @@ const Index = () => {
     try {
       // Extract repo info from URL
       const repoMatch = githubUrl.match(/github\.com\/([^\/]+\/[^\/]+)/);
-      const repoName = repoMatch ? repoMatch[1] : githubUrl;
+      const repoName = repoMatch ? repoMatch[1].replace('.git', '') : githubUrl;
 
       // Create a new pipeline run
       const { data: pipelineRun, error: runError } = await supabase
@@ -169,6 +215,18 @@ const Index = () => {
     return `${supabaseUrl}/functions/v1/github-webhook`;
   };
 
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null; // Will redirect to auth
+  }
+
   return (
     <div className="min-h-screen p-4 sm:p-8">
       <div className="max-w-[1800px] mx-auto">
@@ -178,6 +236,12 @@ const Index = () => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-8"
         >
+          <div className="flex justify-end mb-4">
+            <Button variant="outline" size="sm" onClick={handleSignOut}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
           <h1 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
             AutoStack CI/CD Platform
           </h1>
