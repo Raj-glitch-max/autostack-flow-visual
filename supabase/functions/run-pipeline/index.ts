@@ -25,13 +25,21 @@ serve(async (req) => {
       .update({ status: 'running' })
       .eq('id', pipelineRunId);
 
-    const stages = [
-      { name: 'github_commit', function: null },
-      { name: 'jenkins_build', function: 'trigger-jenkins' },
-      { name: 'docker_ecr', function: 'docker-ecr-push' },
-      { name: 'ecs_deploy', function: 'ecs-deploy' },
-      { name: 'monitoring', function: 'cloudwatch-logs' }
-    ];
+    // Fetch pipeline stages from database
+    const { data: stagesConfig, error: stagesError } = await supabase
+      .from('pipeline_stages_config')
+      .select('stage_name, function_name')
+      .eq('template_id', '00000000-0000-0000-0000-000000000001')
+      .order('order_index', { ascending: true });
+
+    if (stagesError) {
+      throw new Error(`Failed to fetch pipeline configuration: ${stagesError.message}`);
+    }
+
+    const stages = stagesConfig.map(stage => ({
+      name: stage.stage_name,
+      function: stage.function_name
+    }));
 
     let imageUri = '';
     let allSuccess = true;

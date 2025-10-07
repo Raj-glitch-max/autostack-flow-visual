@@ -132,6 +132,71 @@ export type Database = {
         }
         Relationships: []
       }
+      pipeline_stages_config: {
+        Row: {
+          created_at: string
+          description: string | null
+          display_name: string
+          function_name: string | null
+          icon: string | null
+          id: string
+          order_index: number
+          stage_name: string
+          template_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          display_name: string
+          function_name?: string | null
+          icon?: string | null
+          id?: string
+          order_index: number
+          stage_name: string
+          template_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          display_name?: string
+          function_name?: string | null
+          icon?: string | null
+          id?: string
+          order_index?: number
+          stage_name?: string
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_stages_config_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_templates: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

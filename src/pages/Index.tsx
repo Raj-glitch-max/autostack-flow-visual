@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Play, Loader2, Webhook, GitBranch, Wrench, Container, Cloud, Activity } from "lucide-react";
+import { Play, Loader2, Webhook, GitBranch, Wrench, Container, Cloud, Activity, Boxes } from "lucide-react";
 import { NodeCard } from "@/components/NodeCard";
 import { ConnectionLine } from "@/components/ConnectionLine";
 import { BuildHistory } from "@/components/BuildHistory";
@@ -14,49 +14,46 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-const nodes = [
-  {
-    id: "github_commit",
-    title: "GitHub Commit",
-    description: "Triggers the CI/CD pipeline",
-    icon: GitBranch,
-    tooltip: "Real webhook from GitHub triggers the pipeline",
-  },
-  {
-    id: "jenkins_build",
-    title: "Jenkins Build",
-    description: "CI build & Terraform provision infra",
-    icon: Wrench,
-    tooltip: "Real Jenkins CI/CD build via API with Terraform",
-  },
-  {
-    id: "docker_ecr",
-    title: "Docker → ECR",
-    description: "Image built and pushed to AWS ECR",
-    icon: Container,
-    tooltip: "Real Docker build and push to AWS ECR",
-  },
-  {
-    id: "ecs_deploy",
-    title: "ECS Deploy",
-    description: "Terraform deploys container to ECS",
-    icon: Cloud,
-    tooltip: "Real AWS ECS deployment with Terraform",
-  },
-  {
-    id: "monitoring",
-    title: "Monitoring",
-    description: "CloudWatch monitors app performance",
-    icon: Activity,
-    tooltip: "Real CloudWatch metrics and logs",
-  },
-];
-
 const Index = () => {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [nodes, setNodes] = useState<any[]>([]);
   const [githubUrl, setGithubUrl] = useState("https://github.com/your-org/your-repo");
   const [isStarting, setIsStarting] = useState(false);
   const [activeStages, setActiveStages] = useState<Set<string>>(new Set());
+
+  // Fetch pipeline configuration from Supabase
+  useEffect(() => {
+    const fetchPipelineConfig = async () => {
+      const { data: stages, error } = await supabase
+        .from('pipeline_stages_config')
+        .select('*')
+        .eq('template_id', '00000000-0000-0000-0000-000000000001')
+        .order('order_index', { ascending: true });
+
+      if (!error && stages) {
+        const iconMap: Record<string, any> = {
+          'GitBranch': GitBranch,
+          'Boxes': Boxes,
+          'Wrench': Wrench,
+          'Container': Container,
+          'Cloud': Cloud,
+          'Activity': Activity,
+        };
+
+        const configuredNodes = stages.map(stage => ({
+          id: stage.stage_name,
+          title: stage.display_name,
+          description: stage.description,
+          icon: iconMap[stage.icon || 'Boxes'] || Boxes,
+          tooltip: stage.description
+        }));
+
+        setNodes(configuredNodes);
+      }
+    };
+
+    fetchPipelineConfig();
+  }, []);
 
   const startNewPipeline = async () => {
     if (!githubUrl.trim()) {
@@ -91,8 +88,16 @@ const Index = () => {
 
       if (runError) throw runError;
 
+      // Fetch stage names from database
+      const { data: stagesConfig } = await supabase
+        .from('pipeline_stages_config')
+        .select('stage_name')
+        .eq('template_id', '00000000-0000-0000-0000-000000000001')
+        .order('order_index', { ascending: true });
+
+      const stages = stagesConfig?.map(s => s.stage_name) || [];
+      
       // Create build stages
-      const stages = ['github_commit', 'jenkins_build', 'docker_ecr', 'ecs_deploy', 'monitoring'];
       const stageInserts = stages.map(stage => ({
         pipeline_run_id: pipelineRun.id,
         stage_name: stage,
