@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Clock, GitBranch, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Clock, GitBranch, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "@/hooks/use-toast";
 
 interface PipelineRun {
   id: string;
@@ -62,6 +64,38 @@ export const BuildHistory = ({ onSelectRun, selectedRunId }: BuildHistoryProps) 
       setRuns(data);
     }
     setLoading(false);
+  };
+
+  const handleDelete = async (runId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    
+    try {
+      const { error } = await supabase
+        .from('pipeline_runs')
+        .delete()
+        .eq('id', runId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Build Deleted",
+        description: "Pipeline run has been removed from history"
+      });
+
+      // If the deleted run was selected, clear selection
+      if (selectedRunId === runId) {
+        onSelectRun('');
+      }
+
+      fetchRuns();
+    } catch (error) {
+      console.error('Error deleting run:', error);
+      toast({
+        title: "Delete Failed",
+        description: "Could not delete pipeline run",
+        variant: "destructive"
+      });
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -124,14 +158,23 @@ export const BuildHistory = ({ onSelectRun, selectedRunId }: BuildHistoryProps) 
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
-                  className={`p-4 rounded-lg border cursor-pointer transition-all hover:border-accent/50 ${
+                  className={`p-4 rounded-lg border cursor-pointer transition-all hover:border-accent/50 relative group ${
                     selectedRunId === run.id
                       ? 'bg-accent/10 border-accent'
                       : 'bg-card/50 border-border'
                   }`}
                   onClick={() => onSelectRun(run.id)}
                 >
-                  <div className="flex items-start justify-between mb-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/20 hover:text-destructive"
+                    onClick={(e) => handleDelete(run.id, e)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                  
+                  <div className="flex items-start justify-between mb-2 pr-8">
                     <div className="flex items-center gap-2">
                       {getStatusIcon(run.status)}
                       <span className="font-mono text-sm">
