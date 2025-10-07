@@ -10,6 +10,8 @@ interface NodeCardProps {
   icon: LucideIcon;
   isActive: boolean;
   tooltipContent: string;
+  onClick?: () => void;
+  disabled?: boolean;
 }
 
 export const NodeCard = ({ 
@@ -17,7 +19,9 @@ export const NodeCard = ({
   description, 
   icon: Icon, 
   isActive, 
-  tooltipContent 
+  tooltipContent,
+  onClick,
+  disabled = false
 }: NodeCardProps) => {
   return (
     <TooltipProvider>
@@ -34,9 +38,12 @@ export const NodeCard = ({
                 relative p-6 transition-all duration-500 border-2
                 ${isActive 
                   ? 'bg-gradient-to-br from-node-active/20 to-node-active/10 border-node-active node-glow-active' 
-                  : 'bg-card border-border hover:border-border/50'
+                  : 'bg-card border-border hover:border-node-active/50'
                 }
+                ${onClick && !disabled ? 'cursor-pointer hover:scale-105' : ''}
+                ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
               `}
+              onClick={!disabled && onClick ? onClick : undefined}
             >
               <div className="flex flex-col items-center text-center space-y-3">
                 <motion.div

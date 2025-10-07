@@ -5,6 +5,7 @@ import { NodeCard } from "@/components/NodeCard";
 import { ConnectionLine } from "@/components/ConnectionLine";
 import { LogsPanel } from "@/components/LogsPanel";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 
 interface Log {
@@ -85,6 +86,7 @@ const Index = () => {
   const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<Log[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [githubUrl, setGithubUrl] = useState("https://github.com/autostack/demo-app");
 
   const getTimestamp = () => {
     const now = new Date();
@@ -139,6 +141,33 @@ const Index = () => {
     setIsRunning(false);
   };
 
+  const handleNodeClick = (nodeId: string) => {
+    if (isRunning) return;
+    
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    
+    setActiveNodes(prev => new Set([...prev, nodeId]));
+    
+    addLog(`📍 Manual trigger: ${node.title}`, "info");
+    
+    const repoName = githubUrl.split('/').slice(-1)[0] || 'demo-app';
+    
+    node.logs.forEach((logMessage, index) => {
+      setTimeout(() => {
+        const customLog = logMessage
+          .replace('autostack-app', repoName)
+          .replace("Commit SHA: a7f3b9c - 'Updated deployment config'", `Commit SHA: ${Math.random().toString(36).substr(2, 7)} - 'Updated from ${repoName}'`);
+        addLog(customLog, logMessage.includes('✓') ? 'success' : 'info');
+      }, index * 400);
+    });
+    
+    toast({
+      title: `${node.title} Activated`,
+      description: node.tooltip,
+    });
+  };
+
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-7xl mx-auto">
@@ -156,11 +185,31 @@ const Index = () => {
           </p>
         </motion.div>
 
-        {/* Control Buttons */}
+        {/* GitHub URL Input */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
+          className="max-w-2xl mx-auto mb-8"
+        >
+          <label className="block text-sm font-medium mb-2 text-muted-foreground">
+            GitHub Repository URL
+          </label>
+          <Input
+            type="text"
+            value={githubUrl}
+            onChange={(e) => setGithubUrl(e.target.value)}
+            placeholder="Enter GitHub repo URL"
+            className="w-full bg-card/50 border-border"
+            disabled={isRunning}
+          />
+        </motion.div>
+
+        {/* Control Buttons */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
           className="flex justify-center gap-4 mb-12"
         >
           <Button
@@ -190,7 +239,7 @@ const Index = () => {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.4 }}
             className="space-y-4"
           >
             {nodes.map((node, index) => (
@@ -202,6 +251,8 @@ const Index = () => {
                   icon={node.icon}
                   isActive={activeNodes.has(node.id)}
                   tooltipContent={node.tooltip}
+                  onClick={() => handleNodeClick(node.id)}
+                  disabled={isRunning}
                 />
                 {index < nodes.length - 1 && (
                   <ConnectionLine 
@@ -217,7 +268,7 @@ const Index = () => {
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.5 }}
             className="lg:sticky lg:top-8 h-fit"
           >
             <LogsPanel logs={logs} />
