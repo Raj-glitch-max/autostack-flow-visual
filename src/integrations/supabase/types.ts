@@ -14,7 +14,124 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      build_stages: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          logs: string[] | null
+          pipeline_run_id: string
+          stage_name: string
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          logs?: string[] | null
+          pipeline_run_id: string
+          stage_name: string
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          logs?: string[] | null
+          pipeline_run_id?: string
+          stage_name?: string
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "build_stages_pipeline_run_id_fkey"
+            columns: ["pipeline_run_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deployments: {
+        Row: {
+          created_at: string
+          deployed_at: string | null
+          ecs_service: string | null
+          id: string
+          image_tag: string
+          image_uri: string | null
+          pipeline_run_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          deployed_at?: string | null
+          ecs_service?: string | null
+          id?: string
+          image_tag: string
+          image_uri?: string | null
+          pipeline_run_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          deployed_at?: string | null
+          ecs_service?: string | null
+          id?: string
+          image_tag?: string
+          image_uri?: string | null
+          pipeline_run_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deployments_pipeline_run_id_fkey"
+            columns: ["pipeline_run_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_runs: {
+        Row: {
+          commit_message: string | null
+          commit_sha: string | null
+          completed_at: string | null
+          created_at: string
+          github_repo: string
+          id: string
+          started_at: string
+          status: string
+          triggered_by: string | null
+        }
+        Insert: {
+          commit_message?: string | null
+          commit_sha?: string | null
+          completed_at?: string | null
+          created_at?: string
+          github_repo: string
+          id?: string
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          commit_message?: string | null
+          commit_sha?: string | null
+          completed_at?: string | null
+          created_at?: string
+          github_repo?: string
+          id?: string
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
